@@ -9,7 +9,9 @@ import (
 	"log"      // For logging errors
 	"net/http" // Standard HTTP package
 	"os"       // For exiting
-	"strings"  // For string manipulation
+	"path/filepath"
+	"runtime"
+	"strings" // For string manipulation
 
 	"github.com/fatih/color" // For colored console output
 	"github.com/gorilla/mux" // Web router
@@ -20,6 +22,8 @@ import (
 var staticFiles embed.FS
 
 var APP_VERSION = "0.0.43" // Current application version
+
+var DefaultRepositoryRoot string
 
 // sirServer global variable initialized with server metadata
 var sirServer = api.SirServer{ // Use api.SirServer from the api package
@@ -95,9 +99,36 @@ func init() {
 	rootCmd.AddCommand(versionCmd) // Add the new version command
 }
 
+func getCurrentDirectory() (string, error) {
+	// Method 1: Current Working Directory
+	cwdDir, cwdErr := os.Getwd()
+
+	// Method 2: Executable Directory
+	exePath, exeErr := os.Executable()
+	exeDir := filepath.Dir(exePath)
+
+	// Method 3: Caller's File Directory
+	_, filename, _, callerOk := runtime.Caller(0)
+	callerDir := filepath.Dir(filename)
+
+	// Choose the most appropriate method
+	if cwdErr == nil && cwdDir != "" {
+		return cwdDir, nil
+	}
+
+	if exeErr == nil && exeDir != "" {
+		return exeDir, nil
+	}
+
+	if callerOk {
+		return callerDir, nil
+	}
+
+	return "", fmt.Errorf("could not determine current directory")
+}
 func main() {
 	printBanner() // Print the server banner
-
+	DefaultRepositoryRoot, _ = getCurrentDirectory()
 	// Execute the root command. Cobra will handle parsing args and calling the right command.
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -109,7 +140,6 @@ func main() {
 func runServer(cmd *cobra.Command, args []string) {
 	listenAddr := fmt.Sprintf("0.0.0.0:%d", port)
 
-	DefaultRepositoryRoot := "/mnt/cangling/devdata/share" // Re-declare for comparison here
 	if repositoryRoot == DefaultRepositoryRoot {
 		color.Red("Warning: Using default repository root: %s", DefaultRepositoryRoot)
 		color.Red("You can change this by using the --repo-root or -r flag: ")
@@ -121,7 +151,7 @@ func runServer(cmd *cobra.Command, args []string) {
 
 	// --- Static File Serving for /static/ prefix ---
 	fs := http.FileServer(http.FS(staticFiles))
-	r.PathPrefix("/static/").Handler(http.StripPrefix("", fs))
+	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", fs))
 
 	// Initialize the API context with necessary dependencies
 	// Note: We use the global 'repositoryRoot' variable populated by Cobra
