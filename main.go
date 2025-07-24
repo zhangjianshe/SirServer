@@ -21,14 +21,14 @@ import (
 //go:embed static/*
 var staticFiles embed.FS
 
-var APP_VERSION = "0.0.49" // Current application version
+var AppVersion = "0.0.49" // Current application version
 
 var DefaultRepositoryRoot string
 
 // sirServer global variable initialized with server metadata
 var sirServer = api.SirServer{ // Use api.SirServer from the api package
 	Name:    "SirServer",
-	Version: APP_VERSION,
+	Version: AppVersion,
 	Author:  "Zhang JianShe",
 	Email:   "zhangjianshe@gmail.com",
 }
@@ -84,7 +84,7 @@ var versionCmd = &cobra.Command{
 	Short: "Print the version number of SirServer",
 	Long:  `All software has versions. This is SirServer's.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("%s version %s\n", sirServer.Name, APP_VERSION)
+		fmt.Printf("%s version %s\n", sirServer.Name, AppVersion)
 	},
 }
 

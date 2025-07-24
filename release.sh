@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Extract current version from main.go
-CURRENT_VERSION=$(grep 'var APP_VERSION =' main.go | cut -d'"' -f2)
+CURRENT_VERSION=$(grep 'var AppVersion =' main.go | cut -d'"' -f2)
 
 # Increment version (assuming semantic versioning)
 IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
@@ -11,7 +11,7 @@ NEW_PATCH=$((PATCH + 1))
 NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
 
 # Update version in main.go
-sed -i "s/var APP_VERSION = \"${CURRENT_VERSION}\"/var APP_VERSION = \"${NEW_VERSION}\"/" main.go
+sed -i "s/var AppVersion = \"${CURRENT_VERSION}\"/var AppVersion = \"${NEW_VERSION}\"/" main.go
 
 # Commit changes
 git add main.go
