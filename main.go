@@ -182,7 +182,7 @@ func runServer(cmd *cobra.Command, args []string) {
 
 // runUpdate contains the logic to perform the application update
 func runUpdate(cmd *cobra.Command, args []string) {
-	appUpdater := updater.NewUpdater(APP_VERSION, versionInfoURL, downloadBaseURL)
+	appUpdater := updater.NewUpdater(sirServer.Version, versionInfoURL, downloadBaseURL)
 	appUpdater.PerformUpdate()
 }
 
