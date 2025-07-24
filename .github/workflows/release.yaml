@@ -326,7 +326,7 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           
           # Add server to known hosts to avoid strict host key checking issues
-          ssh-keyscan -H "$SERVER_HOST" >> ~/.ssh/known_hosts
+          ssh-keyscan -p "$SSH_PORT" -H "$SERVER_HOST" >> ~/.ssh/known_hosts
           
           # Get the list of files to upload
           LINUX_AMD64_FILE="${{ needs.build-linux.outputs.linux_amd64_archive }}"
@@ -339,7 +339,9 @@ jobs:
           # Create target directory on remote server (if it doesn't exist)
           ssh -i ~/.ssh/id_ed25519 -p $SSH_PORT "$SERVER_USER@$SERVER_HOST" "mkdir -p $TARGET_PATH" || { echo "Failed to create remote directory!"; exit 1; }
           
-          RSYNC_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519 -p $SSH_PORT"
+          # Define the SSH command for rsync and direct ssh calls
+          RSYNC_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519 -p $SSH_PORT -o StrictHostKeyChecking=no" 
+          
           
           echo "Uploading $LINUX_AMD64_FILE to $SERVER_HOST:$TARGET_PATH"
           rsync -avz --progress -e "$RSYNC_SSH_COMMAND" "$LINUX_AMD64_FILE" "$SERVER_USER@$SERVER_HOST:$TARGET_PATH/" || { echo "Rsync of $LINUX_AMD64_FILE failed!"; exit 1; }
