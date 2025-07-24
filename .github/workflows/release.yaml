@@ -130,10 +130,10 @@ jobs:
         run: |
           $env:APP_NAME="SirServer"
           $env:EXT=".exe"
-          $env:OUTPUT_FILE="${env:APP_NAME}${env:EXT}" # <--- CHANGED: Binary will now be named 'SirServer.exe'
+          $env:OUTPUT_FILE="${env:APP_NAME}${env:EXT}" 
           Write-Host "Building for $env:GOOS/$env:GOARCH as $env:OUTPUT_FILE"
-          # Embed the version into the Go binary
-          go build -ldflags "-s -w -X main.AppVersion=${{ steps.get_tag_version.outputs.TAG_VERSION }}" -o "$env:OUTPUT_FILE" ./main.go
+          #go build -ldflags "-s -w -X main.AppVersion=${{ steps.get_tag_version.outputs.TAG_VERSION }}" -o "$env:OUTPUT_FILE" ./main.go
+          go build -ldflags "-s -w " -o "$env:OUTPUT_FILE" ./main.go
           echo "BUILT_BINARY_WINDOWS_AMD64=$env:OUTPUT_FILE" | Out-File -FilePath $env:GITHUB_ENV -Append
         shell: powershell
 
