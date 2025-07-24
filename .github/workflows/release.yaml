@@ -317,7 +317,7 @@ jobs:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
-          # Define your target path on the server
+          SSH_PORT: 22001
           TARGET_PATH: "/mnt/cangling/lincao/data/personal/1/SirServer/${{ steps.get_tag.outputs.TAG_NAME }}"
         run: |
           # Create a file for the private key
@@ -333,17 +333,23 @@ jobs:
           LINUX_ARM64_FILE="${{ needs.build-linux.outputs.linux_arm64_archive }}"
           WINDOWS_FILE="${{ needs.build-windows.outputs.windows_archive }}"
           
+          # Check if files exist before trying to upload
+          ls -lh "$LINUX_AMD64_FILE" "$LINUX_ARM64_FILE" "$WINDOWS_FILE" || { echo "One or more artifact files not found!"; exit 1; }
+
           # Create target directory on remote server (if it doesn't exist)
-          ssh "$SERVER_USER@$SERVER_HOST" -p 22001 "mkdir -p $TARGET_PATH"
+          ssh -i ~/.ssh/id_ed25519 -p $SSH_PORT "$SERVER_USER@$SERVER_HOST" "mkdir -p $TARGET_PATH" || { echo "Failed to create remote directory!"; exit 1; }
           
-          # Upload files using scp
+          RSYNC_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519 -p $SSH_PORT"
+          
           echo "Uploading $LINUX_AMD64_FILE to $SERVER_HOST:$TARGET_PATH"
-          SERVER_ACCESS=" -avz --progress -e'ssh -p 22001' "
-          rsync $SERVER_ACCESS "$LINUX_AMD64_FILE" "$SERVER_USER@$SERVER_HOST:$TARGET_PATH/"
+          rsync -avz --progress -e "$RSYNC_SSH_COMMAND" "$LINUX_AMD64_FILE" "$SERVER_USER@$SERVER_HOST:$TARGET_PATH/" || { echo "Rsync of $LINUX_AMD64_FILE failed!"; exit 1; }
+          
           echo "Uploading $LINUX_ARM64_FILE to $SERVER_HOST:$TARGET_PATH"
-          rsync $SERVER_ACCESS "$LINUX_ARM64_FILE" "$SERVER_USER@$SERVER_HOST:$TARGET_PATH/"
-          echo "Uploading $WINDOWS_FILE" to $SERVER_HOST:$TARGET_PATH"
-          rsync $SERVER_ACCESS "$WINDOWS_FILE" "$SERVER_USER@$SERVER_HOST:$TARGET_PATH/"
+          rsync -avz --progress -e "$RSYNC_SSH_COMMAND" "$LINUX_ARM64_FILE" "$SERVER_USER@$SERVER_HOST:$TARGET_PATH/" || { echo "Rsync of $LINUX_ARM64_FILE failed!"; exit 1; }
+          
+          echo "Uploading $WINDOWS_FILE to $SERVER_HOST:$TARGET_PATH" # Corrected echo for Windows file
+          rsync -avz --progress -e "$RSYNC_SSH_COMMAND" "$WINDOWS_FILE" "$SERVER_USER@$SERVER_HOST:$TARGET_PATH/" || { echo "Rsync of $WINDOWS_FILE failed!"; exit 1; }
           
           echo "All artifacts uploaded to $SERVER_HOST:$TARGET_PATH"
+          rm ~/.ssh/id_ed25519
         shell: bash # Use bash for SSH/SCP commands
