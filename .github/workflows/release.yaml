@@ -114,8 +114,8 @@ jobs:
 
       - name: Decode and Install Certificate (Windows)
         run: |
-          $base64Cert = "${{ secrets.APP_SIGNING_CERTIFICATE_BASE64_PFX }}"
-          $certPassword = "${{ secrets.CERTIFICATE_PASSWORD_PFX }}" # From GitHub Secrets
+          $base64Cert = "${{ secrets.APP_SIGNING_CERTIFICATE_BASE64 }}"
+          $certPassword = "${{ secrets.CERTIFICATE_PASSWORD }}" # From GitHub Secrets
           
           $certBytes = [System.Convert]::FromBase64String($base64Cert)
           [System.IO.File]::WriteAllBytes("certificate.pfx", $certBytes)
