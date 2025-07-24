@@ -90,7 +90,7 @@ var versionCmd = &cobra.Command{
 
 func init() {
 	// Local flags for the 'serve' command
-	serveCmd.Flags().StringVarP(&repositoryRoot, "repo-root", "r", "/mnt/cangling/devdata/share", "Root directory for image repositories")
+	serveCmd.Flags().StringVarP(&repositoryRoot, "repo-root", "r", DefaultRepositoryRoot, "Root directory for image repositories")
 	serveCmd.Flags().IntVarP(&port, "port", "p", 8080, "Port to listen on")
 
 	// Add subcommands to the root command
@@ -151,7 +151,17 @@ func runServer(cmd *cobra.Command, args []string) {
 
 	// --- Static File Serving for /static/ prefix ---
 	fs := http.FileServer(http.FS(staticFiles))
-	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", fs))
+	r.PathPrefix("/static/").Handler(http.StripPrefix("", fs))
+
+	// Debugging route
+	r.HandleFunc("/debug", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		entries, _ := staticFiles.ReadDir("static")
+		fmt.Fprintln(w, "Embedded Files:")
+		for _, entry := range entries {
+			fmt.Fprintf(w, "- %s\n", entry.Name())
+		}
+	})
 
 	// Initialize the API context with necessary dependencies
 	// Note: We use the global 'repositoryRoot' variable populated by Cobra

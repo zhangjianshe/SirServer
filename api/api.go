@@ -11,6 +11,7 @@ import (
 	"image"
 	"log"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"strconv"
 )
@@ -123,7 +124,8 @@ func (ac *ApiContext) RegisterRoutes(r *mux.Router) {
 	// For now, keeping it here as it was logically grouped with other content serving.
 	staticFileDirectory := "static" // Path inside the embedded FS
 	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		content, err := ac.StaticFiles.ReadFile(filepath.Join(staticFileDirectory, "index.html"))
+		indexFile, _ := url.JoinPath(staticFileDirectory, "index.html")
+		content, err := ac.StaticFiles.ReadFile(indexFile)
 		if err != nil {
 			WriteHtml(w, []byte("404 Not Found"))
 			return
