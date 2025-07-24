@@ -334,15 +334,16 @@ jobs:
           WINDOWS_FILE="${{ needs.build-windows.outputs.windows_archive }}"
           
           # Create target directory on remote server (if it doesn't exist)
-          ssh "$SERVER_USER@$SERVER_HOST" -p22001 "mkdir -p $TARGET_PATH"
+          ssh "$SERVER_USER@$SERVER_HOST" -p 22001 "mkdir -p $TARGET_PATH"
           
           # Upload files using scp
           echo "Uploading $LINUX_AMD64_FILE to $SERVER_HOST:$TARGET_PATH"
-          scp "$LINUX_AMD64_FILE" "$SERVER_USER@$SERVER_HOST:$TARGET_PATH/"
+          SERVER_ACCESS=" -avz --progress -e'ssh -p 22001' "
+          rsync $SERVER_ACCESS "$LINUX_AMD64_FILE" "$SERVER_USER@$SERVER_HOST:$TARGET_PATH/"
           echo "Uploading $LINUX_ARM64_FILE to $SERVER_HOST:$TARGET_PATH"
-          scp "$LINUX_ARM64_FILE" "$SERVER_USER@$SERVER_HOST:$TARGET_PATH/"
+          rsync $SERVER_ACCESS "$LINUX_ARM64_FILE" "$SERVER_USER@$SERVER_HOST:$TARGET_PATH/"
           echo "Uploading $WINDOWS_FILE" to $SERVER_HOST:$TARGET_PATH"
-          scp "$WINDOWS_FILE" "$SERVER_USER@$SERVER_HOST:$TARGET_PATH/"
+          rsync $SERVER_ACCESS "$WINDOWS_FILE" "$SERVER_USER@$SERVER_HOST:$TARGET_PATH/"
           
           echo "All artifacts uploaded to $SERVER_HOST:$TARGET_PATH"
         shell: bash # Use bash for SSH/SCP commands
