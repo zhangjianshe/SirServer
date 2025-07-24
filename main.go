@@ -212,12 +212,12 @@ func runUpdate(cmd *cobra.Command, args []string) {
 // printBanner prints a simple and robust banner to the console
 func printBanner() {
 	fmt.Println("╔════════════════════════════════════════════════════════════════════╗")
-	fmt.Println("║                                SirServer                             ║")
+	fmt.Println("║                                SirServer                           ║")
 	fmt.Println("╠════════════════════════════════════════════════════════════════════╣")
-	fmt.Println("║                                                                      ║")
-	fmt.Println("║ Author: Zhang JianShe                                                ║")
-	fmt.Println("║ Email: zhangjianshe@gmail.com                                        ║")
-	fmt.Println("║                                                                      ║")
+	fmt.Println("║                                                                    ║")
+	fmt.Println("║ Author :  Zhang JianShe                                            ║")
+	fmt.Println("║ Email  :  zhangjianshe@gmail.com                                   ║")
+	fmt.Println("║                                                                    ║")
 	fmt.Println("╚════════════════════════════════════════════════════════════════════╝")
 	fmt.Printf("SirServer Version: %s \n", AppVersion) // Display it here too
 
