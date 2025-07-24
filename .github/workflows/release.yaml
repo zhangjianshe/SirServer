@@ -319,6 +319,7 @@ jobs:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SSH_PORT: 22001
           TARGET_PATH: "/mnt/cangling/lincao/data/personal/1/SirServer/${{ steps.get_tag.outputs.TAG_NAME }}"
+          RELEASE_TAG: ${{ steps.get_tag.outputs.TAG_NAME }}
         run: |
           # Create a file for the private key
           mkdir -p ~/.ssh
@@ -351,6 +352,10 @@ jobs:
           
           echo "Uploading $WINDOWS_FILE to $SERVER_HOST:$TARGET_PATH" # Corrected echo for Windows file
           rsync -avz --progress -e "$RSYNC_SSH_COMMAND" "$WINDOWS_FILE" "$SERVER_USER@$SERVER_HOST:$TARGET_PATH/" || { echo "Rsync of $WINDOWS_FILE failed!"; exit 1; }
+          
+          # Create version.txt on the remote server with the release tag
+          echo "Creating version.txt on remote server with content: ${{ env.RELEASE_TAG }}"
+          $RSYNC_SSH_COMMAND "$SERVER_USER@$SERVER_HOST" "echo '${{ env.RELEASE_TAG }}' > '$TARGET_PATH/version.txt'" || { echo "Failed to create version.txt on remote server!"; exit 1; }
           
           echo "All artifacts uploaded to $SERVER_HOST:$TARGET_PATH"
           rm ~/.ssh/id_ed25519
