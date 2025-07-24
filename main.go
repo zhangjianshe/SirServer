@@ -21,7 +21,7 @@ import (
 //go:embed static/*
 var staticFiles embed.FS
 
-var APP_VERSION = "0.0.29"
+var APP_VERSION = "0.0.30"
 
 // SirServer struct defines the server's metadata
 type SirServer struct {
