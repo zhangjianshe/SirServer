@@ -52,7 +52,7 @@ jobs:
           OUTPUT_FILE="${APP_NAME}" # <--- CHANGED: Binary will now be named 'SirServer'
           echo "Building for $GOOS/$GOARCH as $OUTPUT_FILE"
           # Embed the version into the Go binary (assuming main.APP_VERSION string variable)
-          go build -ldflags="-s -w -X main.APP_VERSION=${{ steps.get_tag_version.outputs.TAG_VERSION }}" -o "$OUTPUT_FILE" ./main.go
+          go build -ldflags="-s -w -X main.AppVersion=${{ steps.get_tag_version.outputs.TAG_VERSION }}" -o "$OUTPUT_FILE" ./main.go
           echo "BUILT_BINARY_LINUX_AMD64=$OUTPUT_FILE" >> $GITHUB_ENV # Store for packaging
 
       - name: Build Linux (ARM64)
@@ -64,7 +64,7 @@ jobs:
           OUTPUT_FILE="${APP_NAME}" # <--- CHANGED: Binary will now be named 'SirServer'
           echo "Building for $GOOS/$GOARCH as $OUTPUT_FILE"
           # Embed the version into the Go binary
-          go build -ldflags="-s -w -X main.APP_VERSION=${{ steps.get_tag_version.outputs.TAG_VERSION }}" -o "$OUTPUT_FILE" ./main.go
+          go build -ldflags="-s -w -X main.AppVersion=${{ steps.get_tag_version.outputs.TAG_VERSION }}" -o "$OUTPUT_FILE" ./main.go
           echo "BUILT_BINARY_LINUX_ARM64=$OUTPUT_FILE" >> $GITHUB_ENV # Store for packaging
 
       - name: Package Linux binaries
@@ -133,7 +133,7 @@ jobs:
           $env:OUTPUT_FILE="${env:APP_NAME}${env:EXT}" # <--- CHANGED: Binary will now be named 'SirServer.exe'
           Write-Host "Building for $env:GOOS/$env:GOARCH as $env:OUTPUT_FILE"
           # Embed the version into the Go binary
-          go build -ldflags "-s -w -X main.APP_VERSION=${{ steps.get_tag_version.outputs.TAG_VERSION }}" -o "$env:OUTPUT_FILE" ./main.go
+          go build -ldflags "-s -w -X main.AppVersion=${{ steps.get_tag_version.outputs.TAG_VERSION }}" -o "$env:OUTPUT_FILE" ./main.go
           echo "BUILT_BINARY_WINDOWS_AMD64=$env:OUTPUT_FILE" | Out-File -FilePath $env:GITHUB_ENV -Append
         shell: powershell
 
