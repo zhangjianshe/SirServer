@@ -429,9 +429,6 @@ jobs:
           echo "Uploading $JSON_FILE to $SERVER_HOST:$JSON_TARGET_PATH"
           rsync -avz --progress -e "$RSYNC_SSH_COMMAND" "$JSON_FILE" "$SERVER_USER@$SERVER_HOST:$JSON_TARGET_PATH/" || { echo "Rsync of $JSON_FILE failed!"; exit 1; }
           
-          # Create version.txt on the remote server with the release tag (assumes it goes to a parent dir of BINARIES_TARGET_PATH)
-          echo "Creating version.txt on remote server with content: ${{ env.RELEASE_TAG }}"
-          $RSYNC_SSH_COMMAND "$SERVER_USER@$SERVER_HOST" "echo '${{ env.RELEASE_TAG }}' > '$BINARIES_TARGET_PATH/../version.txt'" || { echo "Failed to create version.txt on remote server!"; exit 1; }
 
           echo "All artifacts uploaded to $SERVER_HOST."
           rm ~/.ssh/id_ed25519 # Clean up SSH key
