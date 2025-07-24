@@ -276,7 +276,6 @@ jobs:
               }
             } catch (error) {
               console.error(`Error checking/deleting release: ${error.message}`);
-              # Note: Do not exit 1 here, just log the error to allow workflow to continue if delete fails
             }
 
       - name: Download Linux Artifacts
