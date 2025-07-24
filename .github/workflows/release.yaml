@@ -117,7 +117,7 @@ jobs:
       - name: Decode and Install Certificate (Windows)
         id: import_cert # Added an ID to this step
         run: |
-          # Referencing new secret names
+          # Referencing the specified secret names
           $base64Cert = "${{ secrets.APP_SIGNING_CERTIFICATE_BASE64 }}" 
           $certPassword = "${{ secrets.CERTIFICATE_PASSWORD }}" 
           
@@ -262,7 +262,7 @@ jobs:
                   release_id: existingRelease.id,
                 });
                 console.log(`Release ${tag} deleted successfully. Waiting for 5 seconds to ensure propagation...`);
-                await new Promise(resolve => setTimeout(resolve, 5000)); # Wait for 5 seconds
+                await new Promise(resolve => setTimeout(resolve, 5000)); // Wait for 5 seconds
               } else {
                 console.log(`No existing release found for tag ${tag}.`);
               }
@@ -284,4 +284,4 @@ jobs:
           tag_name: ${{ steps.get_tag.outputs.TAG_NAME }}
           make_latest: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GitHub automatically provides this token
