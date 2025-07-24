@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -114,12 +115,13 @@ func (u *Updater) PerformUpdate() error {
 	}
 
 	// Construct the full download URL using the ID from the JSON
-	downloadURL := filepath.Join(u.DownloadBaseURL, updateInfo.LatestVersion, targetDownload.Filename)
+	downloadURL := u.DownloadBaseURL + "/" + updateInfo.LatestVersion + "/" + targetDownload.Filename
 	color.Blue("Downloading update from: %s", downloadURL)
 
 	// 6. Download the archive/binary
 	newBinaryReader, err := u.downloadAndPrepareBinary(downloadURL, targetDownload.Filename)
 	if err != nil {
+		log.Print("failed to download and prepare new binary:", err)
 		return fmt.Errorf("failed to download and prepare new binary: %w", err)
 	}
 	defer func() {

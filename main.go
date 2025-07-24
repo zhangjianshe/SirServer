@@ -19,7 +19,7 @@ import (
 //go:embed static/*
 var staticFiles embed.FS
 
-var APP_VERSION = "0.0.42" // Current application version
+var APP_VERSION = "0.0.40" // Current application version
 
 // sirServer global variable initialized with server metadata
 var sirServer = api.SirServer{ // Use api.SirServer from the api package
@@ -41,7 +41,7 @@ var (
 // Update URLs (passed to updater package)
 const (
 	versionInfoURL  = "https://lc.cangling.cn:22002/api/v1/file/read/1b7190d20796b87e6e528748e0d8b45a4d8b5899fdd3c46301c3973713da90cd/version.json"
-	downloadBaseURL = "https://lc.cangling.cn:22002/api/v1/file/read/1b7190d20796b87e6e528748e0d8b45a4d8b5899fdd3c46301c3973713da90cd/"
+	downloadBaseURL = "https://lc.cangling.cn:22002/api/v1/file/read/1b7190d20796b87e6e528748e0d8b45a4d8b5899fdd3c46301c3973713da90cd"
 )
 
 // rootCmd represents the base command when called without any subcommands

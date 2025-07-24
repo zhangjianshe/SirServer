@@ -49,7 +49,7 @@ jobs:
           GOARCH: amd64
         run: |
           APP_NAME="SirServer"
-          OUTPUT_FILE="${APP_NAME}-${GOOS}-${GOARCH}"
+          OUTPUT_FILE="${APP_NAME}" # <--- CHANGED: Binary will now be named 'SirServer'
           echo "Building for $GOOS/$GOARCH as $OUTPUT_FILE"
           # Embed the version into the Go binary (assuming main.APP_VERSION string variable)
           go build -ldflags="-s -w -X main.APP_VERSION=${{ steps.get_tag_version.outputs.TAG_VERSION }}" -o "$OUTPUT_FILE" ./main.go
@@ -61,7 +61,7 @@ jobs:
           GOARCH: arm64
         run: |
           APP_NAME="SirServer"
-          OUTPUT_FILE="${APP_NAME}-${GOOS}-${GOARCH}"
+          OUTPUT_FILE="${APP_NAME}" # <--- CHANGED: Binary will now be named 'SirServer'
           echo "Building for $GOOS/$GOARCH as $OUTPUT_FILE"
           # Embed the version into the Go binary
           go build -ldflags="-s -w -X main.APP_VERSION=${{ steps.get_tag_version.outputs.TAG_VERSION }}" -o "$OUTPUT_FILE" ./main.go
@@ -74,7 +74,8 @@ jobs:
           ARCHIVE_AMD64="${APP_NAME}-linux-amd64.tar.gz"
           ARCHIVE_ARM64="${APP_NAME}-linux-arm64.tar.gz"
 
-          # Create tar.gz archives
+          # Create tar.gz archives. The variables BUILT_BINARY_LINUX_AMD64/ARM64
+          # now correctly point to just "SirServer".
           tar -czvf "$ARCHIVE_AMD64" "${{ env.BUILT_BINARY_LINUX_AMD64 }}"
           tar -czvf "$ARCHIVE_ARM64" "${{ env.BUILT_BINARY_LINUX_ARM64 }}"
 
@@ -129,7 +130,7 @@ jobs:
         run: |
           $env:APP_NAME="SirServer"
           $env:EXT=".exe"
-          $env:OUTPUT_FILE="${env:APP_NAME}-${env:GOOS}-${env:GOARCH}${env:EXT}"
+          $env:OUTPUT_FILE="${env:APP_NAME}${env:EXT}" # <--- CHANGED: Binary will now be named 'SirServer.exe'
           Write-Host "Building for $env:GOOS/$env:GOARCH as $env:OUTPUT_FILE"
           # Embed the version into the Go binary
           go build -ldflags "-s -w -X main.APP_VERSION=${{ steps.get_tag_version.outputs.TAG_VERSION }}" -o "$env:OUTPUT_FILE" ./main.go
@@ -429,7 +430,7 @@ jobs:
           echo "Uploading $JSON_FILE to $SERVER_HOST:$JSON_TARGET_PATH"
           rsync -avz --progress -e "$RSYNC_SSH_COMMAND" "$JSON_FILE" "$SERVER_USER@$SERVER_HOST:$JSON_TARGET_PATH/" || { echo "Rsync of $JSON_FILE failed!"; exit 1; }
           
-
+          
           echo "All artifacts uploaded to $SERVER_HOST."
           rm ~/.ssh/id_ed25519 # Clean up SSH key
         shell: bash
