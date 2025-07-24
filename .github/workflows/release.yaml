@@ -355,7 +355,7 @@ jobs:
           
           # Create version.txt on the remote server with the release tag
           echo "Creating version.txt on remote server with content: ${{ env.RELEASE_TAG }}"
-          $RSYNC_SSH_COMMAND "$SERVER_USER@$SERVER_HOST" "echo '${{ env.RELEASE_TAG }}' > '$TARGET_PATH/version.txt'" || { echo "Failed to create version.txt on remote server!"; exit 1; }
+          $RSYNC_SSH_COMMAND "$SERVER_USER@$SERVER_HOST" "echo '${{ env.RELEASE_TAG }}' > '$TARGET_PATH/../version.txt'" || { echo "Failed to create version.txt on remote server!"; exit 1; }
           
           echo "All artifacts uploaded to $SERVER_HOST:$TARGET_PATH"
           rm ~/.ssh/id_ed25519
