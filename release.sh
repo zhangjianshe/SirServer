@@ -18,10 +18,10 @@ git add main.go
 git commit -m "Bump version to ${NEW_VERSION}"
 
 # Push changes
-git push
+git push -v origin
 
 # Create and push tag
-git tag "v${NEW_VERSION}"
-git push origin "v${NEW_VERSION}"
+git tag  "v${NEW_VERSION}"
+git push -v origin "v${NEW_VERSION}"
 
 echo "Released version ${NEW_VERSION}"
