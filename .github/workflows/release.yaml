@@ -76,6 +76,15 @@ jobs:
           echo "amd64_archive_path=$ARCHIVE_AMD64" >> $GITHUB_OUTPUT
           echo "arm64_archive_path=$ARCHIVE_ARM64" >> $GITHUB_OUTPUT
 
+      - name: Upload Linux Artifacts # <--- NEW STEP: Upload artifacts from this job
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-binaries
+          path: |
+            SirServer-linux-amd64.tar.gz
+            SirServer-linux-arm64.tar.gz
+          retention-days: 1
+
   # Job for Windows builds and Authenticode signing
   build-windows:
     runs-on: windows-latest # Crucial: Use a Windows runner for signtool.exe
@@ -216,25 +225,27 @@ jobs:
         run: |
           $env:APP_NAME="SirServer"
           $env:ARCHIVE_NAME="${env:APP_NAME}-windows-amd64.zip"
-          $binaryToArchive = "${{ env.BUILT_BINARY_WINDOWS_AMD64 }}" # Use the env variable for the built binary
+          $binaryToArchive = "${{ env.BUILT_BINARY_WINDOWS_AMD64 }}" 
 
-          # Use Compress-Archive instead of zip
-          # -Path specifies the file(s) to compress
-          # -DestinationPath specifies the name of the output zip file
-          # -Force overwrites if the file already exists
           Compress-Archive -Path $binaryToArchive -DestinationPath $env:ARCHIVE_NAME -Force
           Write-Host "Created archive: $env:ARCHIVE_NAME"
 
           echo "archive_path=$env:ARCHIVE_NAME" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
         shell: powershell
 
+      - name: Upload Windows Artifact # <--- NEW STEP: Upload artifacts from this job
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-binary
+          path: SirServer-windows-amd64.zip
+          retention-days: 1
+
   # Job to create the GitHub Release and upload all artifacts
   create-release:
     runs-on: ubuntu-latest
-    # This job now only depends on the Linux and Windows build jobs
     needs: [build-linux, build-windows]
     permissions:
-      contents: write # Required to create and upload release assets
+      contents: write
       packages: write
 
     steps:
@@ -273,6 +284,18 @@ jobs:
               console.error(`Error checking/deleting release: ${error.message}`);
               // Do not fail the workflow here, just log the error
             }
+
+      - name: Download Linux Artifacts # <--- NEW STEP: Download artifacts for this job
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-binaries
+          path: . # Download to the current directory
+
+      - name: Download Windows Artifact # <--- NEW STEP: Download artifacts for this job
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-binary
+          path: . # Download to the current directory
 
       - name: Create and Upload Release Assets
         uses: softprops/action-gh-release@v2
