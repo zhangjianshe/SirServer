@@ -3,7 +3,7 @@
 # IMPORTANT: Ensure ALL indentation uses EXACTLY 2 spaces.
 # Do NOT use tabs, as they will cause YAML parsing errors.
 
-name: Go Release
+name: Go Release with Signing (Windows & Linux)
 
 # This workflow runs when a new tag is pushed (e.g., v1.0.0)
 on:
@@ -12,30 +12,11 @@ on:
       - 'v*.*.*' # Trigger on tags like v1.0.0, v1.2.3, etc.
 
 jobs:
-  build-and-release:
-    runs-on: ubuntu-latest # Use a Linux runner for cross-compilation
-
-    # Grant permissions for the GITHUB_TOKEN to create releases
-    # These permissions are at the job level.
-    permissions:
-      contents: write # Required to create and upload release assets
-      packages: write
-
-    # Define a matrix for different OS and architectures
-    strategy:
-      matrix:
-        goos: [linux, windows, darwin]
-        goarch: [amd64, arm64]
-        # Exclude unsupported combinations
-        exclude:
-          - goos: windows
-            goarch: arm64 # Windows ARM64 cross-compilation can be complex, often requiring specific toolchains.
-              # For simplicity, we're excluding it here. If needed, you'd add a separate job
-            # or more complex setup.
-          - goos: darwin
-            goarch: arm64 # Building for Apple Silicon (darwin/arm64) from Linux requires specific setup
-              # (e.g., cgo disabled or a macOS runner). Excluding for simplicity.
-            # If you need darwin/arm64, consider a separate job on a macOS runner.
+  # Job for Linux builds (no specific app signing usually required for Go binaries on Linux)
+  build-linux:
+    runs-on: ubuntu-latest
+    outputs:
+      linux_archives: ${{ steps.archive.outputs.archive_paths }} # To pass to create-release job
 
     steps:
       - name: Checkout code
@@ -56,6 +37,150 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
+      - name: Build Linux (AMD64)
+        env:
+          GOOS: linux
+          GOARCH: amd64
+        run: |
+          APP_NAME="SirServer"
+          OUTPUT_FILE="${APP_NAME}-${GOOS}-${GOARCH}"
+          echo "Building for $GOOS/$GOARCH as $OUTPUT_FILE"
+          go build -o "$OUTPUT_FILE" ./main.go
+          echo "BUILT_BINARY_LINUX_AMD64=$OUTPUT_FILE" >> $GITHUB_ENV # Store for packaging
+
+      - name: Build Linux (ARM64)
+        env:
+          GOOS: linux
+          GOARCH: arm64
+        run: |
+          APP_NAME="SirServer"
+          OUTPUT_FILE="${APP_NAME}-${GOOS}-${GOARCH}"
+          echo "Building for $GOOS/$GOARCH as $OUTPUT_FILE"
+          go build -o "$OUTPUT_FILE" ./main.go
+          echo "BUILT_BINARY_LINUX_ARM64=$OUTPUT_FILE" >> $GITHUB_ENV # Store for packaging
+
+      - name: Package Linux binaries
+        id: archive
+        run: |
+          APP_NAME="SirServer"
+          ARCHIVE_AMD64="${APP_NAME}-linux-amd64.tar.gz"
+          ARCHIVE_ARM64="${APP_NAME}-linux-arm64.tar.gz"
+
+          # Create tar.gz archives
+          tar -czvf "$ARCHIVE_AMD64" "${{ env.BUILT_BINARY_LINUX_AMD64 }}"
+          tar -czvf "$ARCHIVE_ARM64" "${{ env.BUILT_BINARY_LINUX_ARM64 }}"
+
+          # Output paths for the create-release job
+          echo "archive_paths=$ARCHIVE_AMD64 $ARCHIVE_ARM64" >> $GITHUB_OUTPUT
+
+  # Job for Windows builds and Authenticode signing
+  build-windows:
+    runs-on: windows-latest # Crucial: Use a Windows runner for signtool.exe
+    outputs:
+      windows_archive: ${{ steps.archive.outputs.archive_path }} # To pass to create-release job
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Build Windows (AMD64)
+        env:
+          GOOS: windows
+          GOARCH: amd64
+        run: |
+          $env:APP_NAME="SirServer"
+          $env:EXT=".exe"
+          $env:OUTPUT_FILE="${env:APP_NAME}-${env:GOOS}-${env:GOARCH}${env:EXT}"
+          Write-Host "Building for $env:GOOS/$env:GOARCH as $env:OUTPUT_FILE"
+          go build -o "$env:OUTPUT_FILE" ./main.go
+          echo "BUILT_BINARY_WINDOWS_AMD64=$env:OUTPUT_FILE" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+        shell: powershell
+
+      - name: Decode and Install Certificate (Windows)
+        run: |
+          $base64Cert = "${{ secrets.APP_SIGNING_CERTIFICATE_BASE64_PFX }}"
+          $certPassword = "${{ secrets.CERTIFICATE_PASSWORD_PFX }}" # From GitHub Secrets
+          
+          $certBytes = [System.Convert]::FromBase64String($base64Cert)
+          [System.IO.File]::WriteAllBytes("certificate.pfx", $certBytes)
+
+          # Import PFX to CurrentUser\My certificate store
+          # This makes it discoverable by signtool by thumbprint or subject
+          Import-PfxCertificate -FilePath "certificate.pfx" -CertStoreLocation Cert:\CurrentUser\My -Password (ConvertTo-SecureString -String $certPassword -AsPlainText -Force)
+          
+          Remove-Item certificate.pfx # Clean up the PFX file from disk immediately after import
+
+          # Optional: Verify installation (for debugging)
+          Get-ChildItem Cert:\CurrentUser\My | Format-List -Property Subject, Thumbprint
+
+        shell: powershell
+
+      - name: Sign Windows Executable
+        run: |
+          $signtoolPath = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\" -Filter "signtool.exe" -Recurse | Select-Object -ExpandProperty FullName -First 1
+          if (-not $signtoolPath) {
+              Write-Error "Signtool.exe not found. Ensure Windows SDK Signing Tools are installed."
+              exit 1
+          }
+
+          # Find your certificate by its Subject (Common Name). Adjust "My Self-Signed App Signer"
+          # to match the exact Subject of your certificate.
+          $cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object {$_.Subject -like "*CN=My Self-Signed App Signer*"}
+          if (-not $cert) {
+              Write-Error "Certificate not found in store with subject 'CN=My Self-Signed App Signer'. Please verify your certificate's subject."
+              exit 1
+          }
+          $thumbprint = $cert.Thumbprint
+
+          $binaryToSign = "${{ env.BUILT_BINARY_WINDOWS_AMD64 }}"
+          Write-Host "Signing $binaryToSign with thumbprint $thumbprint"
+          
+          # Sign the application using the certificate from the store by thumbprint
+          # Using a timestamp server is highly recommended for long-term validity
+          & "$signtoolPath" sign /s My /sha1 $thumbprint /t http://timestamp.digicert.com /fd sha256 /v $binaryToSign
+          if ($LASTEXITCODE -ne 0) {
+              Write-Error "Signtool failed with exit code $LASTEXITCODE"
+              exit 1
+          }
+          Write-Host "Successfully signed $binaryToSign"
+
+        shell: powershell
+
+      - name: Package Windows binary
+        id: archive
+        run: |
+          $env:APP_NAME="SirServer"
+          $env:ARCHIVE_NAME="${env:APP_NAME}-windows-amd64.zip"
+          zip "$env:ARCHIVE_NAME" "${{ env.BUILT_BINARY_WINDOWS_AMD64 }}"
+          echo "archive_path=$env:ARCHIVE_NAME" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+        shell: powershell
+
+  # Job to create the GitHub Release and upload all artifacts
+  create-release:
+    runs-on: ubuntu-latest
+    # This job now only depends on the Linux and Windows build jobs
+    needs: [build-linux, build-windows]
+    permissions:
+      contents: write # Required to create and upload release assets
+      packages: write
+
+    steps:
       - name: Get tag name
         id: get_tag
         run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
@@ -83,65 +208,26 @@ jobs:
                   release_id: existingRelease.id,
                 });
                 console.log(`Release ${tag} deleted successfully. Waiting for 5 seconds to ensure propagation...`);
-                // Add a delay to allow GitHub to process the deletion
                 await new Promise(resolve => setTimeout(resolve, 5000)); // Wait for 5 seconds
               } else {
                 console.log(`No existing release found for tag ${tag}.`);
               }
             } catch (error) {
               console.error(`Error checking/deleting release: ${error.message}`);
-              // Do not fail the workflow here, just log the error
+              # Do not fail the workflow here, just log the error
             }
 
-      - name: Build
-        run: |
-          # Set GOOS and GOARCH for cross-compilation
-          export GOOS=${{ matrix.goos }}
-          export GOARCH=${{ matrix.goarch }}
-
-          # Define output filename based on OS and architecture
-          APP_NAME="SirServer" # Updated application name
-          EXT=""
-          if [ "$GOOS" = "windows" ]; then
-            EXT=".exe"
-          fi
-          
-          OUTPUT_FILE="${APP_NAME}-${GOOS}-${GOARCH}${EXT}"
-          
-          echo "Building for $GOOS/$GOARCH as $OUTPUT_FILE"
-          go build -o "$OUTPUT_FILE" ./main.go
-
-      - name: Package binary
-        run: |
-          APP_NAME="SirServer" # Updated application name
-          EXT=""
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            EXT=".exe"
-          fi
-          
-          BINARY_NAME="${APP_NAME}-${{ matrix.goos }}-${{ matrix.goarch }}${EXT}"
-          ARCHIVE_NAME="${APP_NAME}-${{ matrix.goos }}-${{ matrix.goarch }}.zip"
-
-          # Create a zip archive for the binary
-          # For Linux/macOS, you might prefer .tar.gz
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            zip "$ARCHIVE_NAME" "$BINARY_NAME"
-          else
-            tar -czvf "$ARCHIVE_NAME" "$BINARY_NAME"
-          fi
-          echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> $GITHUB_ENV # Set as environment variable for next step
-
-      - name: Upload Release Asset
+      - name: Create and Upload Release Assets
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') # Only upload if a tag triggered the workflow
         with:
-          files: ${{ env.ARCHIVE_NAME }} # Use the environment variable for the archive name
-          draft: false # Set to true if you want to draft releases first
-          prerelease: false # Set to true for pre-releases
-          name: Release ${{ steps.get_tag.outputs.TAG_NAME }} # Use the extracted tag name
-          tag_name: ${{ steps.get_tag.outputs.TAG_NAME }} # Use the extracted tag name
-          # The 'if_exists' option is not valid for softprops/action-gh-release@v2.
-          # We are now explicitly deleting the release before creating a new one.
-          make_latest: true # Ensures this release is marked as the latest
+          # Use the outputs from the remaining build jobs as files to upload
+          files: |
+            ${{ needs.build-linux.outputs.linux_archives }}
+            ${{ needs.build-windows.outputs.windows_archive }}
+          draft: false
+          prerelease: false
+          name: Release ${{ steps.get_tag.outputs.TAG_NAME }}
+          tag_name: ${{ steps.get_tag.outputs.TAG_NAME }}
+          make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GitHub automatically provides this token
