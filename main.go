@@ -19,7 +19,7 @@ import (
 //go:embed static/*
 var staticFiles embed.FS
 
-var APP_VERSION = "0.0.40" // Current application version
+var APP_VERSION = "0.0.41" // Current application version
 
 // sirServer global variable initialized with server metadata
 var sirServer = api.SirServer{ // Use api.SirServer from the api package
