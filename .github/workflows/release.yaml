@@ -16,7 +16,9 @@ jobs:
   build-linux:
     runs-on: ubuntu-latest
     outputs:
-      linux_archives: ${{ steps.archive.outputs.archive_paths }} # To pass to create-release job
+      # Changed to output individual archive paths
+      linux_amd64_archive: ${{ steps.archive.outputs.amd64_archive_path }}
+      linux_arm64_archive: ${{ steps.archive.outputs.arm64_archive_path }}
 
     steps:
       - name: Checkout code
@@ -70,8 +72,9 @@ jobs:
           tar -czvf "$ARCHIVE_AMD64" "${{ env.BUILT_BINARY_LINUX_AMD64 }}"
           tar -czvf "$ARCHIVE_ARM64" "${{ env.BUILT_BINARY_LINUX_ARM64 }}"
 
-          # Output paths for the create-release job
-          echo "archive_paths=$ARCHIVE_AMD64 $ARCHIVE_ARM64" >> $GITHUB_OUTPUT
+          # Output paths individually for the create-release job
+          echo "amd64_archive_path=$ARCHIVE_AMD64" >> $GITHUB_OUTPUT
+          echo "arm64_archive_path=$ARCHIVE_ARM64" >> $GITHUB_OUTPUT
 
   # Job for Windows builds and Authenticode signing
   build-windows:
@@ -268,14 +271,15 @@ jobs:
               }
             } catch (error) {
               console.error(`Error checking/deleting release: ${error.message}`);
+              // Do not fail the workflow here, just log the error
             }
 
       - name: Create and Upload Release Assets
         uses: softprops/action-gh-release@v2
         with:
-          # Use the outputs from the remaining build jobs as files to upload
           files: |
-            ${{ needs.build-linux.outputs.linux_archives }}
+            ${{ needs.build-linux.outputs.linux_amd64_archive }}
+            ${{ needs.build-linux.outputs.linux_arm64_archive }}
             ${{ needs.build-windows.outputs.windows_archive }}
           draft: false
           prerelease: false
@@ -283,4 +287,4 @@ jobs:
           tag_name: ${{ steps.get_tag.outputs.TAG_NAME }}
           make_latest: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GitHub automatically provides this token
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
