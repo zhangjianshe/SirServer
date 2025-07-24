@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -54,7 +53,7 @@ func NewUpdater(currentVersion, versionInfoURL, downloadBaseURL string) *Updater
 // This function will attempt to update and then exit the application.
 // The caller (e.g., main function) should then restart the application.
 func (u *Updater) PerformUpdate() error {
-	color.Blue("Checking for updates...")
+	color.Yellow("Checking for updates...")
 
 	// 1. Get latest update information
 	updateInfo, err := u.getUpdateInfo()
@@ -116,12 +115,12 @@ func (u *Updater) PerformUpdate() error {
 
 	// Construct the full download URL using the ID from the JSON
 	downloadURL := u.DownloadBaseURL + "/" + updateInfo.LatestVersion + "/" + targetDownload.Filename
-	color.Blue("Downloading update from: %s", downloadURL)
+	color.Yellow("Downloading update from: %s", downloadURL)
 
 	// 6. Download the archive/binary
 	newBinaryReader, err := u.downloadAndPrepareBinary(downloadURL, targetDownload.Filename)
 	if err != nil {
-		log.Print("failed to download and prepare new binary:", err)
+		color.Red("failed to download and prepare new binary:%s", err.Error())
 		return fmt.Errorf("failed to download and prepare new binary: %w", err)
 	}
 	defer func() {
@@ -132,7 +131,7 @@ func (u *Updater) PerformUpdate() error {
 	}()
 
 	// 7. Apply the update using go-update
-	color.Blue("Applying update...")
+	color.Yellow("Applying update...")
 	err = update.Apply(newBinaryReader, update.Options{})
 	if err != nil {
 		return fmt.Errorf("failed to apply update: %w", err)
@@ -209,7 +208,7 @@ func (u *Updater) downloadAndPrepareBinary(url, filename string) (io.Reader, err
 	executableName := filepath.Base(os.Args[0]) // Get the name of the current running executable
 
 	if strings.HasSuffix(filename, ".tar.gz") {
-		color.Blue("Decompressing .tar.gz archive...")
+		color.Yellow("Decompressing .tar.gz archive...")
 		gzr, err := gzip.NewReader(tempFileForReading) // Read from the temp file
 		if err != nil {
 			return nil, fmt.Errorf("failed to create gzip reader: %w", err)
@@ -254,7 +253,7 @@ func (u *Updater) downloadAndPrepareBinary(url, filename string) (io.Reader, err
 			return nil, fmt.Errorf("could not find executable (%s) inside .tar.gz archive", executableName)
 		}
 	} else if strings.HasSuffix(filename, ".zip") {
-		color.Blue("Decompressing .zip archive...")
+		color.Yellow("Decompressing .zip archive...")
 		zipReader, err := zip.OpenReader(tmpDownloadedFile.Name()) // Open zip from the downloaded temp file
 		if err != nil {
 			return nil, fmt.Errorf("failed to open zip file: %w", err)
