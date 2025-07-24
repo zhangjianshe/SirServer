@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SirServer</title>
+    <link rel="stylesheet" href="static/css/ol.css" />
+    <script src="static/js/ol.js"></script>
+  <script>
+      function formatFileSize(bytes, decimalPlaces = 2) {
+          if (bytes === 0) {
+              return '0 Bytes';
+          }
+
+          const k = 1024;
+          const dm = decimalPlaces < 0 ? 0 : decimalPlaces;
+          const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+
+          const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+          return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+      }
+    window.onload = function () {
+        init_page();
+    }
+    var old_layer=null;
+    function open_repository(data) {
+        // Remove all existing custom layers
+        map.getLayers().forEach(function(layer) {
+            if (layer.get('name') !== 'base-osm') {
+                map.removeLayer(layer);
+            }
+        });
+
+        let url = "api/v1/xyz/" + data.name + "/{z}/{x}/{y}.png";
+        let layer = new ol.layer.Tile({
+            source: new ol.source.XYZ({
+                url: url
+            }),
+            properties: {
+                name: data.name,
+                type: 'repository'
+            }
+        });
+
+        map.addLayer(layer);
+        document.getElementById("layer_info").innerText ="图层地址:   "+ url;
+        // Set view if pared
+        if (data.pared) {
+            map.getView().animate({
+                center: ol.proj.fromLonLat([data.lng, data.lat]),
+                zoom: data.zoom || 15,
+                duration: 1000 // Smooth animation
+            });
+        }
+    }
+
+    function init_page() {
+        fetch("/api/v1/server").then(function (response) {
+            return response.json();
+        }).then(function (result) {
+                const server = result.data;
+                document.getElementById("server_name").innerText = server.name;
+                document.getElementById("server_version").innerText = "Version: " + server.version;
+                document.getElementById("server_author").innerText = `Author ${server.author}(${server.email}) `;
+        });
+
+        fetch("/api/v1/repositories").then(function (response) {
+            return response.json();
+        }).then(function (result) {
+            const repositories = result.data;
+            let repositoriesDiv = document.getElementById("repositories");
+            repositoriesDiv.innerHTML = "";
+            for (let i = 0; i < repositories.length; i++) {
+                let repository = repositories[i];
+                repositoriesDiv = document.createElement("div");
+                repositoriesDiv.className = "repository-item";
+                const fileSize=formatFileSize(repository.size);
+                repositoriesDiv.innerHTML =`<span>${repository.name}</span> <span class='file-size'>${fileSize}</span>`;
+                repositoriesDiv.data=repository;
+                repositoriesDiv.addEventListener("click", function() {
+                    open_repository(this.data);
+                });
+                document.getElementById("repositories").appendChild(repositoriesDiv);
+            }
+        });
+
+        init_map();
+    }
+    map = null;
+    function init_map() {
+        map = new ol.Map({
+            target: 'map',
+            layers: [
+                new ol.layer.Tile({
+                    source: new ol.source.OSM(),
+                    properties: {
+                        name: 'base-osm'
+                    }
+                })
+            ],
+            view: new ol.View({
+                center: ol.proj.fromLonLat([0, 0]),
+                zoom: 2
+            })
+        });
+    }
+
+  </script>
+    <style>
+        :root{
+            --background-color: #202124;
+            --foreground-color: #ffffff;
+            --item-bk-color: #333333;
+            --item-bk-color-hover: #404040;
+            --item-fg-color: #ffffff;
+        }
+         *{
+             margin: 0;
+             padding: 0;
+             box-sizing: border-box;
+         }
+        #root {
+            width: 100%;
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
+        }
+        #header{
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 80px;
+            background-color: #333333;
+            color: #ffffff;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+        }
+        #content{
+            position: absolute;
+            top: 80px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+        }
+        #list{
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 300px;
+            background-color: #181818;
+            color: #ffffff;
+            padding: 10px;
+        }
+        #map{
+            position: absolute;
+            left: 300px;
+            top: 0;
+            bottom: 0;
+            right: 0;
+        }
+        #repositories{
+            align-items: center;
+        }
+        .repository-item{
+            padding: 10px;
+            cursor: pointer;
+            border-radius: 10px;
+            color: var(--foreground-color);
+            background-color: var(--item-bk-color);
+            margin-bottom: 4px;
+            user-select: none;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .repository-item:hover{
+            background-color: var(--item-bk-color-hover);
+        }
+        .file-size{
+            text-align: right;
+            color: var(--ol-subtle-foreground-color);
+            user-select: none;
+        }
+        #logo_panel {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            user-select: none;
+        }
+        #server_name{
+            user-select: none;
+        }
+        #server_version{
+            color: var(--ol-subtle-foreground-color);
+            user-select: none;
+        }
+        #layer_info{
+            position: absolute;
+            top: 10px;
+            height: 70px;
+
+            width: 500px;
+            right: 10px;
+
+            border-radius: 10px;
+            background-color: var(--item-bk-color);
+            color: var(--foreground-color);
+            padding: 10px;
+            z-index: 4000;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+<div id="root">
+        <div id="header">
+            <div id="logo_panel">
+                <img width="40px" height="40px" src="static/images/logo.svg" alt="SirServer Logo">
+                <div>
+                    <h1 id="server_name">SirServer</h1>
+                    <p id="server_version">Version: 0.0.1</p>
+                </div>
+            </div>
+            <p id="server_author">Author: <a href="https://github.com/zhangjianshe">zhangjianshe</a></p>
+        </div>
+    <div id="content">
+        <div id="list">
+                <div id="repositories">
+                </div>
+        </div>
+        <div id="map">
+
+        </div>
+        <div id="layer_info"></div>
+    </div>
+</div>
+</body>
+</html>

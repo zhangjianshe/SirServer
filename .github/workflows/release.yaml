@@ -1,0 +1,147 @@
+# .github/workflows/release.yml
+
+# IMPORTANT: Ensure ALL indentation uses EXACTLY 2 spaces.
+# Do NOT use tabs, as they will cause YAML parsing errors.
+
+name: Go Release
+
+# This workflow runs when a new tag is pushed (e.g., v1.0.0)
+on:
+  push:
+    tags:
+      - 'v*.*.*' # Trigger on tags like v1.0.0, v1.2.3, etc.
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest # Use a Linux runner for cross-compilation
+
+    # Grant permissions for the GITHUB_TOKEN to create releases
+    # These permissions are at the job level.
+    permissions:
+      contents: write # Required to create and upload release assets
+      packages: write
+
+    # Define a matrix for different OS and architectures
+    strategy:
+      matrix:
+        goos: [linux, windows, darwin]
+        goarch: [amd64, arm64]
+        # Exclude unsupported combinations
+        exclude:
+          - goos: windows
+            goarch: arm64 # Windows ARM64 cross-compilation can be complex, often requiring specific toolchains.
+              # For simplicity, we're excluding it here. If needed, you'd add a separate job
+            # or more complex setup.
+          - goos: darwin
+            goarch: arm64 # Building for Apple Silicon (darwin/arm64) from Linux requires specific setup
+              # (e.g., cgo disabled or a macOS runner). Excluding for simplicity.
+            # If you need darwin/arm64, consider a separate job on a macOS runner.
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Get tag name
+        id: get_tag
+        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Delete existing release if it exists
+        uses: actions/github-script@v7
+        id: delete_release
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const tag = context.ref.replace('refs/tags/', '');
+            try {
+              const { data: releases } = await github.rest.repos.listReleases({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+              });
+
+              const existingRelease = releases.find(release => release.tag_name === tag);
+
+              if (existingRelease) {
+                console.log(`Found existing release for tag ${tag} with ID ${existingRelease.id}. Deleting...`);
+                await github.rest.repos.deleteRelease({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  release_id: existingRelease.id,
+                });
+                console.log(`Release ${tag} deleted successfully. Waiting for 5 seconds to ensure propagation...`);
+                // Add a delay to allow GitHub to process the deletion
+                await new Promise(resolve => setTimeout(resolve, 5000)); // Wait for 5 seconds
+              } else {
+                console.log(`No existing release found for tag ${tag}.`);
+              }
+            } catch (error) {
+              console.error(`Error checking/deleting release: ${error.message}`);
+              // Do not fail the workflow here, just log the error
+            }
+
+      - name: Build
+        run: |
+          # Set GOOS and GOARCH for cross-compilation
+          export GOOS=${{ matrix.goos }}
+          export GOARCH=${{ matrix.goarch }}
+
+          # Define output filename based on OS and architecture
+          APP_NAME="SirServer" # Updated application name
+          EXT=""
+          if [ "$GOOS" = "windows" ]; then
+            EXT=".exe"
+          fi
+          
+          OUTPUT_FILE="${APP_NAME}-${GOOS}-${GOARCH}${EXT}"
+          
+          echo "Building for $GOOS/$GOARCH as $OUTPUT_FILE"
+          go build -o "$OUTPUT_FILE" ./main.go
+
+      - name: Package binary
+        run: |
+          APP_NAME="SirServer" # Updated application name
+          EXT=""
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            EXT=".exe"
+          fi
+          
+          BINARY_NAME="${APP_NAME}-${{ matrix.goos }}-${{ matrix.goarch }}${EXT}"
+          ARCHIVE_NAME="${APP_NAME}-${{ matrix.goos }}-${{ matrix.goarch }}.zip"
+
+          # Create a zip archive for the binary
+          # For Linux/macOS, you might prefer .tar.gz
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            zip "$ARCHIVE_NAME" "$BINARY_NAME"
+          else
+            tar -czvf "$ARCHIVE_NAME" "$BINARY_NAME"
+          fi
+          echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> $GITHUB_ENV # Set as environment variable for next step
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') # Only upload if a tag triggered the workflow
+        with:
+          files: ${{ env.ARCHIVE_NAME }} # Use the environment variable for the archive name
+          draft: false # Set to true if you want to draft releases first
+          prerelease: false # Set to true for pre-releases
+          name: Release ${{ steps.get_tag.outputs.TAG_NAME }} # Use the extracted tag name
+          tag_name: ${{ steps.get_tag.outputs.TAG_NAME }} # Use the extracted tag name
+          # The 'if_exists' option is not valid for softprops/action-gh-release@v2.
+          # We are now explicitly deleting the release before creating a new one.
+          make_latest: true # Ensures this release is marked as the latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GitHub automatically provides this token
