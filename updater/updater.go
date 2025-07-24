@@ -134,6 +134,7 @@ func (u *Updater) PerformUpdate() error {
 	color.Yellow("Applying update...")
 	err = update.Apply(newBinaryReader, update.Options{})
 	if err != nil {
+		color.Red("failed to apply update: %s", err.Error())
 		return fmt.Errorf("failed to apply update: %w", err)
 	}
 
