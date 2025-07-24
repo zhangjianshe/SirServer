@@ -268,7 +268,6 @@ jobs:
               }
             } catch (error) {
               console.error(`Error checking/deleting release: ${error.message}`);
-              # Do not fail the workflow here, just log the error
             }
 
       - name: Create and Upload Release Assets
