@@ -213,7 +213,15 @@ jobs:
         run: |
           $env:APP_NAME="SirServer"
           $env:ARCHIVE_NAME="${env:APP_NAME}-windows-amd64.zip"
-          zip "$env:ARCHIVE_NAME" "${{ env.BUILT_BINARY_WINDOWS_AMD64 }}"
+          $binaryToArchive = "${{ env.BUILT_BINARY_WINDOWS_AMD64 }}" # Use the env variable for the built binary
+
+          # Use Compress-Archive instead of zip
+          # -Path specifies the file(s) to compress
+          # -DestinationPath specifies the name of the output zip file
+          # -Force overwrites if the file already exists
+          Compress-Archive -Path $binaryToArchive -DestinationPath $env:ARCHIVE_NAME -Force
+          Write-Host "Created archive: $env:ARCHIVE_NAME"
+
           echo "archive_path=$env:ARCHIVE_NAME" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
         shell: powershell
 
@@ -254,7 +262,7 @@ jobs:
                   release_id: existingRelease.id,
                 });
                 console.log(`Release ${tag} deleted successfully. Waiting for 5 seconds to ensure propagation...`);
-                await new Promise(resolve => setTimeout(resolve, 5000)); // Wait for 5 seconds
+                await new Promise(resolve => setTimeout(resolve, 5000)); # Wait for 5 seconds
               } else {
                 console.log(`No existing release found for tag ${tag}.`);
               }
@@ -276,4 +284,4 @@ jobs:
           tag_name: ${{ steps.get_tag.outputs.TAG_NAME }}
           make_latest: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GitHub automatically provides this token
+          GITHUB_TOKEN: ${{ secrets.GITHUB
