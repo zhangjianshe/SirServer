@@ -12,8 +12,10 @@ import (
 	"log"                    // For logging errors
 	"net/http"               // Standard HTTP package
 	"os"                     // For exiting
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"time"
 )
 
 //go:embed static/*
@@ -172,8 +174,31 @@ func runServer(cmd *cobra.Command, args []string) {
 	color.Blue("\nClick link to open browser: http://localhost:%d\n", port)
 	color.Cyan("\n")
 	log.Printf("SirServer listening on %s", listenAddr)
-	err := http.ListenAndServe(listenAddr, r)
-	if err != nil {
+
+	// Start the HTTP server in a goroutine so it doesn't block
+	serverErrors := make(chan error, 1)
+	go func() {
+		log.Printf("SirServer listening on %s", listenAddr)
+		serverErrors <- http.ListenAndServe(listenAddr, r)
+	}()
+
+	// Give the server a moment to start up before trying to open the browser
+	time.Sleep(500 * time.Millisecond) // Added time.Sleep for server startup
+
+	// Attempt to open the browser
+	browserURL := fmt.Sprintf("http://localhost:%d", port)
+	color.Blue("\nClick link to open browser: %s\n", browserURL) // Keep this line for manual fallback
+	color.Cyan("\n")                                             // Added new line for spacing
+
+	if err := OpenBrowser(browserURL); err != nil {
+		log.Printf("Warning: Could not automatically open browser: %v", err)
+		fmt.Println("Please open your web browser manually and navigate to:", browserURL)
+	} else {
+		log.Println("Browser launched successfully (or command sent).")
+	}
+
+	// Wait for the server to exit (e.g., due to an error or signal)
+	if err := <-serverErrors; err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
 }
@@ -196,4 +221,56 @@ func printBanner() {
 	fmt.Println("╚════════════════════════════════════════════════════════════════════╝")
 	fmt.Printf("SirServer Version: %s \n", AppVersion) // Display it here too
 
+}
+
+// OpenBrowser attempts to open the given URL in the default web browser
+// based on the operating system.
+func OpenBrowser(url string) error {
+	var cmd string
+	var args []string
+
+	switch runtime.GOOS {
+	case "windows":
+		// On Windows, use "start" command to open the URL in the default browser.
+		// "/c" is used with cmd.exe to execute the command and then terminate.
+		// "start" is a built-in command, so we need to run it via cmd.exe.
+		cmd = "cmd"
+		args = []string{"/c", "start", url}
+	case "darwin": // macOS
+		// On macOS, use "open" command.
+		cmd = "open"
+		args = []string{url}
+	case "linux":
+		// On Linux, try "xdg-open" first, then "sensible-browser", then "gnome-open", etc.
+		// xdg-open is the recommended way to open files/URLs in the user's preferred application.
+		cmd = "xdg-open"
+		args = []string{url}
+		// Fallback options if xdg-open is not available (less common now, but good for robustness)
+		// Consider adding more robust fallback logic if xdg-open is frequently missing in your target environments.
+		// For simplicity, we'll stick to xdg-open as the primary.
+		// If xdg-open fails, you might try:
+		// cmd = "sensible-browser"
+		// cmd = "gnome-open"
+		// cmd = "kde-open"
+		// cmd = "x-www-browser"
+	default:
+		return fmt.Errorf("unsupported operating system: %s", runtime.GOOS)
+	}
+
+	// Create a new command.
+	// We don't need to capture stdout/stderr unless we want to debug specific browser errors.
+	// For simply launching, this is sufficient.
+	c := exec.Command(cmd, args...)
+
+	// Run the command.
+	// Use c.Start() if you want to launch the browser asynchronously and not wait for it to close.
+	// Use c.Run() if you want to wait for the command to complete (e.g., browser process to exit),
+	// but for a browser, Start() is usually more appropriate.
+	err := c.Start()
+	if err != nil {
+		return fmt.Errorf("failed to open browser: %w", err)
+	}
+
+	log.Printf("Attempted to open URL: %s using command: %s %v", url, cmd, args)
+	return nil
 }
