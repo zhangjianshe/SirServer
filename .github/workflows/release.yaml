@@ -138,16 +138,24 @@ jobs:
               Write-Error "Signtool.exe not found. Ensure Windows SDK Signing Tools are installed."
               exit 1
           }
-
-          # Find your certificate by its Subject (Common Name). Adjust "My Self-Signed App Signer"
-          # to match the exact Subject of your certificate.
-          $cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object {$_.Subject -like "*CN=My Self-Signed App Signer*"}
+          
+          # FIND YOUR CERTIFICATE BY ITS EXACT SUBJECT
+          # Use the exact Subject from your provided certificate info:
+          # Subject: C = CN, ST = BeiJing, L = BeiJing, O = cangling.cn, OU = DEV, CN = ZhangJianshe
+          # The -eq operator requires an exact match. Using -like "*CN=ZhangJianshe*" is also an option if you only want to match the CN.
+          $cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object {$_.Subject -eq "C=CN, ST=BeiJing, L=BeiJing, O=cangling.cn, OU=DEV, CN=ZhangJianshe"}
+          
           if (-not $cert) {
-              Write-Error "Certificate not found in store with subject 'CN=My Self-Signed App Signer'. Please verify your certificate's subject."
+              Write-Error "Certificate not found in store with subject 'C=CN, ST=BeiJing, L=BeiJing, O=cangling.cn, OU=DEV, CN=ZhangJianshe'. Please verify your certificate's subject."
               exit 1
           }
+          if ($cert.Count -gt 1) {
+              Write-Warning "Multiple certificates found matching the subject. Using the first one."
+              $cert = $cert | Select-Object -First 1
+          }
           $thumbprint = $cert.Thumbprint
-
+          Write-Host "Found certificate with Subject: $($cert.Subject) and Thumbprint: $thumbprint"
+          
           $binaryToSign = "${{ env.BUILT_BINARY_WINDOWS_AMD64 }}"
           Write-Host "Signing $binaryToSign with thumbprint $thumbprint"
           
