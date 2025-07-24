@@ -6,12 +6,14 @@ import (
 	"compress/gzip" // For Linux .tar.gz
 	"encoding/json"
 	"fmt"
+	"github.com/schollz/progressbar/v3"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/blang/semver"              // For semantic version comparison
 	"github.com/fatih/color"               // For colored output
@@ -36,8 +38,9 @@ type Download struct {
 // Updater struct holds dependencies and constants for the update process
 type Updater struct {
 	CurrentVersion  string
-	VersionInfoURL  string // URL to your update_info.json
-	DownloadBaseURL string // Base URL for file downloads, e.g., "https://lc.cangling.cn:22002/api/v1/file/download/"
+	VersionInfoURL  string       // URL to your update_info.json
+	DownloadBaseURL string       // Base URL for file downloads, e.g., "https://lc.cangling.cn:22002/api/v1/file/download/"
+	httpClient      *http.Client // Add an HTTP client with timeout
 }
 
 // NewUpdater creates and returns a new Updater instance
@@ -46,6 +49,9 @@ func NewUpdater(currentVersion, versionInfoURL, downloadBaseURL string) *Updater
 		CurrentVersion:  currentVersion,
 		VersionInfoURL:  versionInfoURL,
 		DownloadBaseURL: downloadBaseURL,
+		httpClient: &http.Client{
+			Timeout: 10 * 60 * time.Second, // Recommended: Set a timeout for HTTP requests
+		},
 	}
 }
 
@@ -115,7 +121,7 @@ func (u *Updater) PerformUpdate() error {
 
 	// Construct the full download URL using the ID from the JSON
 	downloadURL := u.DownloadBaseURL + "/" + updateInfo.LatestVersion + "/" + targetDownload.Filename
-	color.Yellow("Downloading update from: %s", downloadURL)
+	//color.Yellow("Downloading update from: %s", downloadURL)
 
 	// 6. Download the archive/binary
 	newBinaryReader, err := u.downloadAndPrepareBinary(downloadURL, targetDownload.Filename)
@@ -165,43 +171,60 @@ func (u *Updater) getUpdateInfo() (*UpdateInfo, error) {
 
 // downloadAndPrepareBinary downloads the specified file and returns an io.ReadCloser for the extracted executable.
 // The caller is responsible for closing the returned io.ReadCloser.
-func (u *Updater) downloadAndPrepareBinary(url, filename string) (io.ReadCloser, error) { // <--- Change return type to io.ReadCloser
-	resp, err := http.Get(url)
+func (u *Updater) downloadAndPrepareBinary(url, filename string) (io.ReadCloser, error) { // Return io.ReadCloser
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
+	}
+
+	resp, err := u.httpClient.Do(req) // Use the configured HTTP client
 	if err != nil {
 		return nil, fmt.Errorf("failed to download file: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() // Close the HTTP response body
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to download file, HTTP status %s", resp.Status)
 	}
 
+	// Get content length for the progress bar
+	contentLength := resp.ContentLength
+	if contentLength <= 0 {
+		color.Yellow("Warning: Could not determine download size. Progress bar may not be accurate.")
+	}
+
+	// Create the progress bar
+	bar := progressbar.DefaultBytes(
+		contentLength,
+		"Downloading update",
+	)
+
+	// Create a temporary file to store the downloaded content
 	tmpDownloadedFile, err := os.CreateTemp("", "sirserver-update-download-*.tmp")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temporary download file: %w", err)
 	}
-	// DO NOT DEFER tmpDownloadedFile.Close() or os.Remove(tmpDownloadedFile.Name()) here for the *downloaded* file.
-	// We need to keep it open or ensure it's removed after being consumed by the zip/tar reader, or passed as raw binary.
+	// We defer the removal of this file for later cleanup, *after* we're done with its content.
+	// The responsibility for closing tmpDownloadedFile will be handled by io.Copy or its usage.
 
-	_, err = io.Copy(tmpDownloadedFile, resp.Body)
+	// Copy with progress bar. io.Copy will read from resp.Body and write to both tmpDownloadedFile and bar.
+	_, err = io.Copy(io.MultiWriter(tmpDownloadedFile, bar), resp.Body)
 	if err != nil {
 		tmpDownloadedFile.Close()
 		os.Remove(tmpDownloadedFile.Name())
 		return nil, fmt.Errorf("failed to write downloaded content to temporary file: %w", err)
 	}
-	tmpDownloadedFile.Close() // Close after writing all content. The file handle is closed, but the file on disk remains.
+	tmpDownloadedFile.Close() // Close the writer handle after copying all content
 
 	// Now open the downloaded temporary file for reading and decompression/extraction
 	tempFileForReading, err := os.Open(tmpDownloadedFile.Name())
 	if err != nil {
-		os.Remove(tmpDownloadedFile.Name()) // Clean up original downloaded file if we can't open it
+		os.Remove(tmpDownloadedFile.Name()) // Clean up on error
 		return nil, fmt.Errorf("failed to open temporary downloaded file for reading: %w", err)
 	}
-	// NO DEFER tmpFileForReading.Close() HERE! The caller will close the returned reader.
-	// We will still remove tmpDownloadedFile.Name() at the end, as it's just the archive.
+	// DO NOT DEFER CLOSURE OF tempFileForReading HERE. It's the returned reader.
 
-	var newBinaryReader io.ReadCloser // <--- Change type here
-
+	var newBinaryReader io.ReadCloser
 	executableName := filepath.Base(os.Args[0])
 	if runtime.GOOS == "windows" {
 		executableName = strings.TrimSuffix(executableName, ".exe")
@@ -209,58 +232,58 @@ func (u *Updater) downloadAndPrepareBinary(url, filename string) (io.ReadCloser,
 
 	if strings.HasSuffix(filename, ".tar.gz") {
 		color.Yellow("Decompressing .tar.gz archive...")
-		gzr, err := gzip.NewReader(tempFileForReading) // Read from the temp file
+		gzr, err := gzip.NewReader(tempFileForReading)
 		if err != nil {
-			tempFileForReading.Close()          // Ensure this is closed if gzip fails
-			os.Remove(tmpDownloadedFile.Name()) // Clean up the downloaded file
+			tempFileForReading.Close()
+			os.Remove(tmpDownloadedFile.Name())
 			return nil, fmt.Errorf("failed to create gzip reader: %w", err)
 		}
-		defer gzr.Close() // Close gzip reader as soon as tar reader is done
+		defer gzr.Close()
 
 		tr := tar.NewReader(gzr)
 		var found bool
 		for {
 			header, err := tr.Next()
 			if err == io.EOF {
-				break
+				break // End of archive
 			}
 			if err != nil {
-				tempFileForReading.Close()          // Ensure this is closed
-				os.Remove(tmpDownloadedFile.Name()) // Clean up
+				tempFileForReading.Close()
+				os.Remove(tmpDownloadedFile.Name())
 				return nil, fmt.Errorf("failed to read tar header: %w", err)
 			}
 
 			if header.Typeflag == tar.TypeReg && strings.TrimSuffix(filepath.Base(header.Name), ".exe") == executableName {
 				tmpExeFile, err := os.CreateTemp("", "sirserver-extracted-*.tmp")
 				if err != nil {
-					tempFileForReading.Close()          // Ensure this is closed
-					os.Remove(tmpDownloadedFile.Name()) // Clean up
+					tempFileForReading.Close()
+					os.Remove(tmpDownloadedFile.Name())
 					return nil, fmt.Errorf("failed to create temp exe file for tar: %w", err)
 				}
 				if _, err := io.Copy(tmpExeFile, tr); err != nil {
 					tmpExeFile.Close()
 					os.Remove(tmpExeFile.Name())
-					tempFileForReading.Close()          // Ensure this is closed
-					os.Remove(tmpDownloadedFile.Name()) // Clean up
+					tempFileForReading.Close()
+					os.Remove(tmpDownloadedFile.Name())
 					return nil, fmt.Errorf("failed to copy extracted tar entry to temp file: %w", err)
 				}
 				tmpExeFile.Seek(0, io.SeekStart)
-				newBinaryReader = tmpExeFile // This is the file that will be returned
+				newBinaryReader = tmpExeFile
 				found = true
 				break
 			}
 		}
 		if !found {
-			tempFileForReading.Close()          // Ensure this is closed
-			os.Remove(tmpDownloadedFile.Name()) // Clean up
+			tempFileForReading.Close()
+			os.Remove(tmpDownloadedFile.Name())
 			return nil, fmt.Errorf("could not find executable (%s) inside .tar.gz archive", executableName)
 		}
 	} else if strings.HasSuffix(filename, ".zip") {
 		color.Yellow("Decompressing .zip archive...")
 		zipReader, err := zip.OpenReader(tmpDownloadedFile.Name())
 		if err != nil {
-			tempFileForReading.Close()          // Ensure this is closed
-			os.Remove(tmpDownloadedFile.Name()) // Clean up
+			tempFileForReading.Close()
+			os.Remove(tmpDownloadedFile.Name())
 			return nil, fmt.Errorf("failed to open zip file: %w", err)
 		}
 		defer zipReader.Close()
@@ -273,50 +296,48 @@ func (u *Updater) downloadAndPrepareBinary(url, filename string) (io.ReadCloser,
 			}
 		}
 		if exeFile == nil {
-			tempFileForReading.Close()          // Ensure this is closed
-			os.Remove(tmpDownloadedFile.Name()) // Clean up
+			tempFileForReading.Close()
+			os.Remove(tmpDownloadedFile.Name())
 			return nil, fmt.Errorf("could not find executable (%s) inside .zip archive", executableName)
 		}
 
 		rc, err := exeFile.Open()
 		if err != nil {
-			tempFileForReading.Close()          // Ensure this is closed
-			os.Remove(tmpDownloadedFile.Name()) // Clean up
+			tempFileForReading.Close()
+			os.Remove(tmpDownloadedFile.Name())
 			return nil, fmt.Errorf("failed to open executable in zip: %w", err)
 		}
-		defer rc.Close() // Close the zip entry reader
+		defer rc.Close()
 
 		tmpExeFile, err := os.CreateTemp("", "sirserver-extracted-*.tmp")
 		if err != nil {
-			tempFileForReading.Close()          // Ensure this is closed
-			os.Remove(tmpDownloadedFile.Name()) // Clean up
+			tempFileForReading.Close()
+			os.Remove(tmpDownloadedFile.Name())
 			return nil, fmt.Errorf("failed to create temp exe file for zip: %w", err)
 		}
 		if _, err := io.Copy(tmpExeFile, rc); err != nil {
 			tmpExeFile.Close()
 			os.Remove(tmpExeFile.Name())
-			tempFileForReading.Close()          // Ensure this is closed
-			os.Remove(tmpDownloadedFile.Name()) // Clean up
+			tempFileForReading.Close()
+			os.Remove(tmpDownloadedFile.Name())
 			return nil, fmt.Errorf("failed to copy extracted zip entry to temp file: %w", err)
 		}
 		tmpExeFile.Seek(0, io.SeekStart)
-		newBinaryReader = tmpExeFile // This is the file that will be returned
+		newBinaryReader = tmpExeFile
 	} else {
 		// If it's not a known archive, assume it's the raw binary itself.
-		// In this case, tmpDownloadedFile already contains the binary.
 		tempFileForReading.Seek(0, io.SeekStart)
-		newBinaryReader = tempFileForReading // This is the file that will be returned
+		newBinaryReader = tempFileForReading
 	}
 
 	if newBinaryReader == nil {
-		tempFileForReading.Close()          // Ensure this is closed
-		os.Remove(tmpDownloadedFile.Name()) // Clean up
+		tempFileForReading.Close()
+		os.Remove(tmpDownloadedFile.Name())
 		return nil, fmt.Errorf("internal error: new binary reader is nil after download and preparation")
 	}
 
-	// Now, clean up the original downloaded archive file here.
+	// Clean up the original downloaded archive file here.
 	// We only need the extracted executable (newBinaryReader).
-	// The tempFileForReading was opened on tmpDownloadedFile.Name(), so we remove that.
 	os.Remove(tmpDownloadedFile.Name())
 
 	return newBinaryReader, nil

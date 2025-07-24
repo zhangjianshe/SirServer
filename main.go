@@ -21,7 +21,7 @@ import (
 //go:embed static/*
 var staticFiles embed.FS
 
-var APP_VERSION = "0.0.42" // Current application version
+var APP_VERSION = "0.0.46" // Current application version
 
 var DefaultRepositoryRoot string
 
