@@ -1,8 +1,11 @@
 # SirServer
 
 
-start the server
-
-
-./SirServer -h
-./SirServer -r path/to/sfile repository -p 8080
+## start the server
+```shell
+  ./SirServer serve -r path/to/sfile repository -p 8080
+```
+## help
+```shell
+  ./SirServer -h
+```
