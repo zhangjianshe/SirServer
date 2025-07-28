@@ -1,6 +1,6 @@
 # SirServer
 
->  这个仓库不再使用，请移步至 [Cangling Server](https://github.com/zhangjianshe/CanglingServer.git)
+>  这个仓库不再使用，请移步至 [Cangling Server](https://github.com/zhangjianshe/Cangling-Server.git)
 
 ## start the server
 ```shell
